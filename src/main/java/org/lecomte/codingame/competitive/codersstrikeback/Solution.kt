@@ -1,97 +1,207 @@
 package org.lecomte.codingame.competitive.codersstrikeback
 
 import java.util.*
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
-class Position(val x: Int, val y: Int)
+// CONSTANTS
+const val MAX_THRUST = 100
+const val CHECKPOINT_RADIUS = 600
+const val MAX_X = 16000
+const val MAX_Y = 9000
 
-class Input(
-        val position: Position,
-        val nextCheckpointPosition: Position,
+// PARAMETERS
+const val MIN_THRUST = 30;
+
+data class Point2D(val x: Int, val y: Int) {
+    fun move(vector: Vector2D): Point2D {
+        return Point2D(x + vector.dx, y + vector.dy)
+    }
+
+    fun isInRadius(other: Point2D, radius: Int): Boolean {
+        return abs((x - other.x) * (y - other.y)) < radius * radius;
+    }
+}
+
+data class Vector2D(val dx: Int, val dy: Int) {
+    fun squareLength(): Int {
+        return dx * dx + dy * dy
+    }
+}
+
+class Checkpoints {
+    private val mapCenter = Point2D(MAX_X / 2, MAX_Y / 2)
+
+    private val list = mutableListOf<Point2D>()
+    private var current = Point2D(0, 0)
+    private var complete = false
+
+    fun contains(checkpoint: Point2D) = list.contains(checkpoint)
+
+    fun add(checkpoint: Point2D) {
+        if (!list.contains(checkpoint)) {
+            list.add(checkpoint)
+        } else {
+            complete = true
+        }
+    }
+
+    fun afterNextOrCenter(): Point2D {
+        if (!complete) {
+            return mapCenter
+        }
+
+        for (i in 0 until list.size) {
+            if (current == list[i]) {
+                val nextIndex = if (i == list.size - 1) 0 else i + 1
+                return list[nextIndex]
+            }
+        }
+        return mapCenter
+    }
+
+    fun isComplete() = complete
+
+    fun setCurrent(checkpoint: Point2D) {
+        current = checkpoint
+    }
+
+    override fun toString(): String {
+        return "Checkpoints(size=${list.size}, list=$list)"
+    }
+}
+
+data class Input(
+        val position: Point2D,
+        val nextCheckpointPosition: Point2D,
         val nextCheckpointDist: Int,
         val nextCheckpointAngle: Int,
-        val opponentPosition: Position)
+        val opponentPosition: Point2D)
 
-class Bot {
-    private val BOOST_DISTANCE_THRESHOLD = 5000;
-    private val THRUST_BRAKE_DISTANCE_START = 2000;
-    private val THRUST_BRAKE_DISTANCE_STOP = 1000;
-    private val MAX_THRUST = 100;
-    private val MIN_THRUST = 10; // TODO  à valider
-    public val a: Double = (MAX_THRUST - MIN_THRUST * 1.0) / (THRUST_BRAKE_DISTANCE_START - THRUST_BRAKE_DISTANCE_STOP);
-    public val b: Double = MAX_THRUST - THRUST_BRAKE_DISTANCE_START * a;
-    private val MAP_CENTER = Position(8000, 4500);
 
-    private var input: Input = Input(Position(0, 0), Position(0, 0), 0, 0, Position(0, 0));
-    private var boostReady = true;
+abstract class ThrustComputer {
+    private val boostDistanceThreshold = 5000
 
-    fun refresh(input: Input): Unit {
-        this.input = input;
-    }
-
-    fun computeThrust(): Int {
-        val thrust: Int;
-
-        if (input.nextCheckpointAngle > 90 || input.nextCheckpointAngle < -90) {
-            thrust = 0;
-        } else if (input.nextCheckpointDist < THRUST_BRAKE_DISTANCE_STOP) {
-            thrust = MIN_THRUST;
-        } else if (input.nextCheckpointDist > THRUST_BRAKE_DISTANCE_START) {
-            thrust = MAX_THRUST;
+    fun computeThrust(input: Input): Int {
+        return if (shouldBoost(input)) {
+            200
+        } else if (input.nextCheckpointAngle > 90 || input.nextCheckpointAngle < -90) {
+            0
         } else {
-            thrust = ((a * input.nextCheckpointDist) + b).roundToInt();
-        };
-
-        return thrust;
-    }
-
-    fun computeThrustAsString(): String {
-        System.err.println("DISTANCE -> ${input.nextCheckpointDist}");
-        return if (input.nextCheckpointAngle < 10 && input.nextCheckpointAngle > -10 && input.nextCheckpointDist > BOOST_DISTANCE_THRESHOLD && boostReady) {
-            boostReady = false;
-            "BOOST";
-        } else {
-            computeThrust().toString();
+            specificCompute(input)
         }
     }
 
-    fun computeDestination(): Position {
-        if (input.nextCheckpointDist < 2500) {
-            return MAP_CENTER;
-        } else {
-            return input.nextCheckpointPosition;
+    abstract fun specificCompute(input: Input): Int
+
+    private fun shouldBoost(input: Input): Boolean {
+        return abs(input.nextCheckpointAngle) < 10 && input.nextCheckpointDist > boostDistanceThreshold
+    }
+}
+
+class LinearThrustComputer : ThrustComputer() {
+    private val brakeDistanceStart = 2000
+    private val brakeDistanceStop = 1000
+    private val a = (MAX_THRUST - MIN_THRUST * 1.0) / (brakeDistanceStart - brakeDistanceStop)
+    private val b = MAX_THRUST - brakeDistanceStart * a
+
+    override fun specificCompute(input: Input): Int {
+        return when {
+            input.nextCheckpointDist < brakeDistanceStop -> {
+                MIN_THRUST
+            }
+            input.nextCheckpointDist > brakeDistanceStart -> {
+                MAX_THRUST
+            }
+            else -> {
+                ((a * input.nextCheckpointDist) + b).roundToInt()
+            }
         }
+    }
+}
+
+class StepThrustComputer : ThrustComputer() {
+    private val approachThrustCoeff = (MAX_THRUST * 0.8).roundToInt()
+
+    override fun specificCompute(input: Input): Int {
+        return when {
+            input.nextCheckpointDist < CHECKPOINT_RADIUS -> {
+                0
+            }
+            input.nextCheckpointDist > 2 * CHECKPOINT_RADIUS -> {
+                MAX_THRUST
+            }
+            else -> {
+                approachThrustCoeff
+            }
+        }
+    }
+}
+
+class Pod(private val thrustComputer: ThrustComputer) {
+
+    private var turn = 0;
+    private var previousPosition = Point2D(0, 0)
+    private var previousCheckpoint = Point2D(0, 0)
+    private var speed = Vector2D(0, 0)
+    private val checkpoints = Checkpoints()
+    private var input = Input(previousPosition, previousCheckpoint, 0, 0, Point2D(0, 0))
+
+    fun startTurn(input: Input) {
+        if (previousCheckpoint != input.nextCheckpointPosition && !checkpoints.isComplete()) {
+            checkpoints.add(input.nextCheckpointPosition)
+        }
+
+        if (turn > 0) {
+            speed = Vector2D(input.position.x - previousPosition.x, input.position.y - previousPosition.y)
+        }
+        turn++
+        checkpoints.setCurrent(input.nextCheckpointPosition)
+
+        this.input = input
+    }
+
+    fun endTurn() {
+        previousPosition = input.position
+        previousCheckpoint = input.nextCheckpointPosition
+        System.err.println("TURN --> $turn, DISTANCE --> ${input.nextCheckpointDist}, SPEED --> $speed")
+    }
+
+    private fun computeDestination(): Point2D {
+        return if (shouldPointToNextCheckpoint()) {
+            checkpoints.afterNextOrCenter()
+        } else {
+            input.nextCheckpointPosition
+        }
+    }
+
+    private fun shouldPointToNextCheckpoint(): Boolean {
+        return input.nextCheckpointDist < CHECKPOINT_RADIUS && speed.squareLength() > 40000
     }
 
     fun output(): String {
-        val thrust = computeThrustAsString();
-        val destination = computeDestination();
-        return "${destination.x} ${destination.y} $thrust"
+        val thrust = thrustComputer.computeThrust(input)
+        val command = if (thrust > MAX_THRUST) "BOOST" else thrust.toString()
+        val destination = computeDestination()
+        return "${destination.x} ${destination.y} $command"
     }
 }
 
 fun main(args: Array<String>) {
     val input = Scanner(System.`in`)
-    val bot = Bot();
+    val bot = Pod(StepThrustComputer())
 
     // game loop
     while (true) {
-        val position = Position(input.nextInt(), input.nextInt());
-        val nextCheckpointPosition = Position(input.nextInt(), input.nextInt());
-        val nextCheckpointDist = input.nextInt();
-        val nextCheckpointAngle = input.nextInt();
-        val opponentPosition = Position(input.nextInt(), input.nextInt());
+        val position = Point2D(input.nextInt(), input.nextInt())
+        val nextCheckpointPosition = Point2D(input.nextInt(), input.nextInt())
+        val nextCheckpointDist = input.nextInt()
+        val nextCheckpointAngle = input.nextInt()
+        val opponentPosition = Point2D(input.nextInt(), input.nextInt())
 
-        bot.refresh(Input(position, nextCheckpointPosition, nextCheckpointDist, nextCheckpointAngle, opponentPosition));
-        // Write an action using println()
-        // To debug: System.err.println("Debug messages...");
-
-        // Edit this line to output the target position
-        // and thrust (0 <= thrust <= 100)
-        // i.e.: "x y thrust"
-        println(bot.output());
-
-
+        bot.startTurn(Input(position, nextCheckpointPosition, nextCheckpointDist, nextCheckpointAngle, opponentPosition))
+        println(bot.output())
+        bot.endTurn()
     }
 }
 
