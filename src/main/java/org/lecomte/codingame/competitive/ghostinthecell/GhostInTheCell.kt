@@ -5,15 +5,80 @@ import java.util.*
 const val FACTORY_TYPE = "FACTORY"
 const val TROOP_TYPE = "TROOP"
 
-class Factories(size: Int) {
-    private val adjacencyMatrix = Array(size) { IntArray(size) }
+enum class FactoryOwner {
+    ME, NEUTRAL, OPPONENT
+}
 
-    fun addEdge(node1: Int, node2: Int, weight: Int) {
-        adjacencyMatrix[node1][node2] = weight
+data class Factory(val id: Int) {
+    var production = 0
+    var stock = 0
+    var owner = FactoryOwner.NEUTRAL
+
+    fun setOwner(value: Int) {
+        owner = if (value == -1) FactoryOwner.OPPONENT else if (value == 0) FactoryOwner.NEUTRAL else FactoryOwner.ME
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as Factory
+
+        if (id != other.id) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return id
+    }
+
+    override fun toString(): String {
+        return "Factory(id=$id, production=$production, stock=$stock, owner=$owner)"
+    }
+
+
+}
+
+class Factories(size: Int) {
+    private val content: MutableSet<Factory> = mutableSetOf()
+    private val distances = Array(size) { Array<Int?>(size) { null } }
+
+    init {
+        for (i in 0 until size) {
+            content.add(Factory(i))
+        }
+    }
+
+    fun get(id: Int): Factory {
+        return content.single { factory -> factory.id == id }
+    }
+
+    fun addDistance(id1: Int, id2: Int, distance: Int) {
+        distances[id1][id2] = distance
+        distances[id2][id1] = distance
+    }
+
+    fun factoriesByDistance(id: Int): List<Pair<Int?, Factory>> {
+        return distances[id]
+                .mapIndexed { index, distance -> Pair(distance, get(index)) }
+                .filter { pair -> pair.first != null }
+                .sortedBy { pair -> pair.first }
+    }
+
+    fun closestFactoryMatching(factory: Factory, predicate: (Factory) -> Boolean): Factory? {
+        return factoriesByDistance(factory.id)
+                .map { pair -> pair.second }
+                .find(predicate)
+    }
+
+    fun closestOpponentFactory(factory: Factory): Factory? = closestFactoryMatching(factory) { it.owner == FactoryOwner.OPPONENT }
+
+    fun closestNeutralFactory(factory: Factory): Factory? = closestFactoryMatching(factory) { it.owner == FactoryOwner.NEUTRAL }
+
     fun display() {
-        adjacencyMatrix.forEachIndexed { i, edges -> System.err.println("Factory $i : ${edges.joinToString(" ")}") }
+        content.forEach { factory -> System.err.println(factory) }
+        distances.forEachIndexed { i, edges -> System.err.println("Factory $i : ${edges.joinToString(" ")}") }
     }
 }
 
@@ -31,8 +96,8 @@ fun main(args: Array<String>) {
         val factory1 = input.nextInt()
         val factory2 = input.nextInt()
         val distance = input.nextInt()
-        factories.addEdge(factory1, factory2, distance)
-        factories.addEdge(factory2, factory1, distance)
+        //System.err.println("$factoryCount $factory1, $factory2, $distance")
+        factories.addDistance(factory1, factory2, distance)
     }
 
     factories.display()
@@ -40,9 +105,8 @@ fun main(args: Array<String>) {
     // game loop
     while (true) {
         val entityCount = input.nextInt() // the number of entities (e.g. factories and troops)
-        var sourceFactory: Int? = null
-        var destinationFactory: Int? = null
-        var cyborgsInFactory: Int? = null
+        val attacks = mutableListOf<Pair<Factory, Factory>>()
+
         for (i in 0 until entityCount) {
             val entityId = input.nextInt()
             val entityType = input.next()
@@ -53,18 +117,35 @@ fun main(args: Array<String>) {
             val arg5 = input.nextInt()
 
             if (entityType == FACTORY_TYPE) {
-                if (arg1 == 1) {
-                    sourceFactory = entityId
-                    cyborgsInFactory = arg2
-                } else if (arg1 == -1) {
-                    destinationFactory = entityId
+                val factory = factories.get(entityId)
+                factory.setOwner(arg1)
+                factory.stock = arg2
+                factory.production = arg3
+                when (factory.owner) {
+                    FactoryOwner.ME -> {
+                        val factoryToAttack = factories.closestNeutralFactory(factory)
+                                ?: factories.closestOpponentFactory(factory)
+                        if (factoryToAttack != null) {
+                            attacks.add(Pair(factory, factoryToAttack))
+                        }
+                    }
+                    FactoryOwner.OPPONENT -> {
+                        // TODO OPPONENT
+                    }
+                    else -> {
+                        // TODO NEUTRAL
+                    }
                 }
+            } else if (entityType == TROOP_TYPE) {
+                // TODO something here one day
             }
         }
 
-        val message = if (sourceFactory != null && destinationFactory != null)
-            "MOVE $sourceFactory $destinationFactory $cyborgsInFactory"
-        else "WAIT"
+        System.err.println("${attacks.size} attacks planned")
+        val message = if (attacks.isEmpty())
+            "WAIT"
+        else
+            attacks.joinToString(";") { pair -> "MOVE ${pair.first.id} ${pair.second.id} ${pair.first.stock}" }
 
         println(message)
     }
