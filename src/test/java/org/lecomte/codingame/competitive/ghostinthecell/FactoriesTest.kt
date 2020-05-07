@@ -14,6 +14,7 @@ internal class FactoriesTest {
     fun setup() {
         factories = Factories(5)
         factories.get(1).owner = OPPONENT
+        factories.get(1).production = 1
 
         factories.addDistance(0, 1, 5)
         factories.addDistance(0, 2, 3)
@@ -51,15 +52,15 @@ internal class FactoriesTest {
     }
 
     @Nested
-    inner class ClosestOpponentFactory {
+    inner class ClosestProductiveOpponentFactory {
         @Test
-        fun `should return the closest opponent when exists`() {
-            assertThat(factories.closestOpponentFactory(factories.get(0))).isEqualTo(factories.get(1))
+        fun `should return the closest productive opponent when exists`() {
+            assertThat(factories.closestProductiveOpponentFactory(factories.get(0))).isEqualTo(factories.get(1))
         }
 
         @Test
-        fun `should return null when there is no opponent factory`() {
-            assertThat(factories.closestOpponentFactory(factories.get(1))).isNull()
+        fun `should return null when there is no productive opponent factory`() {
+            assertThat(factories.closestProductiveOpponentFactory(factories.get(1))).isNull()
         }
     }
 }

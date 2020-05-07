@@ -6,9 +6,17 @@
 Take the first friendly factory in the list and send all troups to the first enemy factory
 
 ### 2.0
-For each friendly factory, find the closest neutral factory or by default the closest enemy
-factory and attack
+- Refactored to implement classes
+- For each friendly factory, find the closest neutral factory or by default the closest enemy
+factory and attack with full force
+
+### 3.0
+- Refactored to first read input then make decisions instead of making decisions while
+reading, because this lead to wrong decisions, especially on first turn
+- Ignored no-production factories
+- Allow a factory to launch several attacks. For each friendly factory:
+ 1. create a list of neutral factories then enemy factories ordered by distance
+ 2. send each turn just enough cyborgs to overwhelm target factory asap
 
 ## Ideas
-
-1. Ignore factories that don't produce any cyborgs.
+- Use the bombs to spot early the biggest enemy factories.
