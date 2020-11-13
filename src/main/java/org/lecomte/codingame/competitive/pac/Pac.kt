@@ -437,7 +437,7 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
 /**
  * Grab the pellets as fast as you can!
  **/
-fun main(args: Array<String>) {
+fun main() {
 
     // Read init inputs
     val input = Scanner(System.`in`)

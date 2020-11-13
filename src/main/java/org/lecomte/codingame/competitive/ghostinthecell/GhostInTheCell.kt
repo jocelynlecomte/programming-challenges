@@ -108,7 +108,7 @@ class Factories(size: Int) : Iterable<Factory> {
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
  **/
-fun main(args: Array<String>) {
+fun main() {
     val input = Scanner(System.`in`)
     val factoryCount = input.nextInt() // the number of factories
     val factories = Factories(factoryCount)

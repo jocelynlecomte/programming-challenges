@@ -187,7 +187,7 @@ class Pod(private val thrustComputer: ThrustComputer) {
     }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     val input = Scanner(System.`in`)
     val bot = Pod(StepThrustComputer())
 
