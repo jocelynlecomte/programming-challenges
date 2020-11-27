@@ -86,6 +86,14 @@ class Inventory(var content: Pos) {
 }
 
 class Path(val path: List<Spell>) {
+    fun first(): Spell? {
+        return path[0]
+    }
+
+    fun add(spell: Spell): Path {
+        return Path(path + spell)
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Path) return false
@@ -110,7 +118,7 @@ class Path(val path: List<Spell>) {
     }
 }
 
-class PathToInventory(val inventory: Inventory, val path: List<Spell>) {
+class PathToInventory(val inventory: Inventory, val path: Path) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PathToInventory) return false
@@ -124,8 +132,6 @@ class PathToInventory(val inventory: Inventory, val path: List<Spell>) {
         return inventory.hashCode() + path.hashCode()
     }
 }
-
-//typealias InventoryWithPath = Pair<Inventory, List<Spell>>
 
 abstract class Action(val id: Int, val pos: Pos) {
     override fun equals(other: Any?): Boolean {
@@ -147,7 +153,7 @@ class Spell(id: Int, pos: Pos) : Action(id, pos) {
         return "S(${id})"
     }
 
-    fun isTop(): Boolean {
+    fun isOnlyPositive(): Boolean {
         return pos.tier0 >= 0 && pos.tier1 >= 0 && pos.tier2 >= 0 && pos.tier3 >= 0
     }
 }
@@ -195,8 +201,8 @@ class Tome {
         }
     }
 
-    fun worthySpell(maxCost: Int): Spell? {
-        return spells.find { it.cost <= maxCost && it.spell.isTop() }?.spell
+    fun worthySpell(inventory: Inventory): Spell? {
+        return spells.find { it.cost <= inventory.content.tier0 && it.spell.isOnlyPositive() }?.spell
     }
 }
 
@@ -268,16 +274,7 @@ fun main() {
         }
 
         val myWitch = witches[0]
-
-        var action: String
-        val brew = potions.filter { myWitch.inventory.isAppliable(it) }.maxBy { it.price }
-        if (brew != null) {
-            System.err.println("best doable brew $brew")
-            action = "BREW ${brew.id}"
-        } else {
-            action = computeAction(myWitch.inventory, mySpellBook, potions, tome, startTime)
-
-        }
+        val action = computeAction(currentTurn, myWitch.inventory, mySpellBook, potions, tome, startTime)
 
         // in the first league: BREW <id> | WAIT; later: BREW <id> | CAST <id> [<times>] | LEARN <id> | REST | WAIT
         System.err.println("Turn $currentTurn computation time : ${computeTime(startTime)}")
@@ -291,51 +288,20 @@ private fun computeTime(startTime: Long): Long {
     return (endTime - startTime) / 1_000_000
 }
 
-private fun computeAction(startingInventory: Inventory, mySpellBook: SpellBook, potions: MutableList<Potion>, tome: Tome, startTime: Long): String {
-    val worthySpell = tome.worthySpell(startingInventory.content.tier0)
+private fun computeAction(turn: Int, startingInventory: Inventory, mySpellBook: SpellBook, potions: MutableList<Potion>, tome: Tome, startTime: Long): String {
+    val brew = potions.filter { startingInventory.isAppliable(it) }.maxBy { it.price }
+    if (brew != null) {
+        System.err.println("best doable brew $brew")
+        return "BREW ${brew.id}"
+    }
+
+    val worthySpell = spellToLearn(mySpellBook, startingInventory, tome)
     if (worthySpell != null) {
         System.err.println("Learn a worthy spell ${worthySpell.id}")
         return "LEARN ${worthySpell.id}"
     }
 
-    // Each node of the graph will be an inventory and the path to obtain it
-    var pathsToInventory = listOf(PathToInventory(startingInventory, listOf()))
-    // retainedPaths maps a potion to the first found path to inventory which allow it
-    val retainedPaths = mutableMapOf<Potion, PathToInventory>()
-    var depth = 0
-    var computeTime = computeTime(startTime)
-    var stop = false
-    while (!stop) {
-        depth++
-        //System.err.println("computed depth $depth, computation time $computeTime")
-        val newPathsToInventory = mutableListOf<PathToInventory>()
-        // generate new inventories from previous ones
-        for (currentPath in pathsToInventory) {
-            val appliableSpells = mySpellBook.spells.map { it.first }
-                    .filter { currentPath.inventory.isAppliable(it) }
-            val fromCurrent = appliableSpells.map { PathToInventory(currentPath.inventory.apply(it), currentPath.path + it) }
-            newPathsToInventory.addAll(fromCurrent)
-        }
-        System.err.println("depth $depth, current size: ${pathsToInventory.size}, new size: ${newPathsToInventory.size}, time: ${computeTime(startTime)}")
-        // retain those that we don't already have and that allow to brew
-        for (pathToInventory in newPathsToInventory) {
-            if (retainedPaths.size == potions.size) {
-                break
-            }
-            potions.filter { !retainedPaths.containsKey(it) }
-                    .filter { pathToInventory.inventory.isAppliable(it) }
-                    .forEach { retainedPaths[it] = pathToInventory }
-        }
-
-        pathsToInventory = newPathsToInventory
-
-        computeTime = computeTime(startTime)
-        stop = computeTime > 15 || retainedPaths.size == potions.size
-    }
-    System.err.println("end of generation")
-
-    //retained.forEach { System.err.println("retained potion $it ") }
-    // Check all retained to find the best
+    val retainedPaths = getRetainedPaths(startingInventory, startTime, mySpellBook, potions)
     if (retainedPaths.isEmpty()) {
         System.err.println("nothing was retained")
         if (mySpellBook.castable().isEmpty()) {
@@ -352,12 +318,59 @@ private fun computeAction(startingInventory: Inventory, mySpellBook: SpellBook, 
         val retainedEntry = retainedPaths.maxBy { entry -> entry.key.price }
         //val retainedEntry = retainedPaths.minBy { entry -> entry.value.path.size }
         val minPath = retainedEntry!!.value
-        val spellToCast = minPath.path[0]
-        System.err.println("Will try to brew potion ${retainedEntry.key.id}, and cast ${spellToCast.id}")
+        val spellToCast = minPath.path.first()
+        System.err.println("Will try to brew potion ${retainedEntry.key.id}, and cast ${spellToCast!!.id}")
         return if (mySpellBook.isCastable(spellToCast)) {
             "CAST ${spellToCast.id}"
         } else {
             "REST"
         }
     }
+}
+
+private fun spellToLearn(spellBook: SpellBook, inventory: Inventory, tome: Tome): Spell? {
+    if (spellBook.spells.size < 8) {
+        return tome.spells[0].spell
+    } else {
+        return tome.worthySpell(inventory)
+    }
+}
+
+private fun getRetainedPaths(startingInventory: Inventory, startTime: Long, mySpellBook: SpellBook, potions: MutableList<Potion>): MutableMap<Potion, PathToInventory> {
+    // Each node of the graph will be an inventory and the path to obtain it
+    var pathsToInventory = listOf(PathToInventory(startingInventory, Path(listOf())))
+    // retainedPaths maps a potion to the first found path to inventory which allow it
+    val retainedPaths = mutableMapOf<Potion, PathToInventory>()
+    var depth = 0
+    var computeTime: Long
+    var stop = false
+    while (!stop) {
+        depth++
+        //System.err.println("computed depth $depth, computation time $computeTime")
+        val newPathsToInventory = mutableListOf<PathToInventory>()
+        // generate new inventories from previous ones
+        for (currentPath in pathsToInventory) {
+            val appliableSpells = mySpellBook.spells.map { it.first }
+                    .filter { currentPath.inventory.isAppliable(it) }
+            val fromCurrent = appliableSpells.map { PathToInventory(currentPath.inventory.apply(it), currentPath.path.add(it)) }
+            newPathsToInventory.addAll(fromCurrent)
+        }
+        System.err.println("depth $depth, current size: ${pathsToInventory.size}, new size: ${newPathsToInventory.size}, time: ${computeTime(startTime)}")
+        // retain those that we don't already have and that allow to brew
+        for (pathToInventory in newPathsToInventory) {
+            if (retainedPaths.size == potions.size) {
+                break
+            }
+            potions.filter { !retainedPaths.containsKey(it) }
+                    .filter { pathToInventory.inventory.isAppliable(it) }
+                    .forEach { retainedPaths[it] = pathToInventory }
+        }
+
+        pathsToInventory = newPathsToInventory
+
+        computeTime = computeTime(startTime)
+        stop = computeTime > 15 || retainedPaths.size == potions.size || newPathsToInventory.size > 5000
+    }
+    System.err.println("end of generation")
+    return retainedPaths
 }
