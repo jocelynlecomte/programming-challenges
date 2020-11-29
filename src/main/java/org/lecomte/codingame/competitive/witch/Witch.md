@@ -31,7 +31,7 @@ And to brew a potion, it should be included in the volume created by the invento
 - Else we don't have any path, so if a spell is castable, CAST it
 - Else REST
 
-### 3.1 Silver league
+### 3.1 Silver league (start of third-tier)
 - If a potion can be made, BREW it (and prefer the one with max price).
 - Else if we don't have 8 spells, or if there is a worthy spell, LEARN it
 - Else 
@@ -45,9 +45,26 @@ if possible, else REST
 - Else we don't have any path, so if a spell is castable, CAST it
 - Else REST
 
+### 4.0 (end of first-tier)
+- If we have a path and it's still valid (i.e there still is a valid target for it), continue to walk through it
+- Else if a potion can be made, BREW it (and prefer the one with max price) if its price is fair enough.
+- Else if we have less than 10 spells, LEARN the worthiest affordable spell
+- Else get retained paths and choose the one leading to the most rewarding potion as the current path to target
+- Else we don't have any path, so find the most powerful castable spell and CAST it
+- Else REST
 
+#### Retained paths generation
+
+Generate inventories (checking time and memory) until we have one path for every potion
+    - Generate a graph of inventories reachable by casting spells on current inventory 
+    - Retain paths which allow to brew a new potion.
+    - It gives a path for each potion, which should be the shortest one
+        
 ### Ideas
+- WTF is Monte-Carlo ?
+- Try to generate more path by generating less objects
 - When we want to try a path and the first spell is exhausted, try to CAST another one in the path instead of REST
-- The path can change every turn, so it may be that we are heading to an expensive potion and if we find something
-brewable, we BREW it, even if it's a poor potion. Try to retain the path from one turn to the other, or at least
- avoid poor potions ?
+- Optimize path:
+    - try to REST the least possible
+    
+ 
