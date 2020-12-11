@@ -3,13 +3,15 @@ package org.lecomte.codingame.competitive.witch
 import java.util.*
 
 const val INVENTORY_MAX_SIZE = 10
+const val MAX_TURNS = 100
 
 data class Pos(val tier0: Int, val tier1: Int, val tier2: Int, val tier3: Int) {
     fun add(pos: Pos) = Pos(
-            tier0 + pos.tier0,
-            tier1 + pos.tier1,
-            tier2 + pos.tier2,
-            tier3 + pos.tier3)
+        tier0 + pos.tier0,
+        tier1 + pos.tier1,
+        tier2 + pos.tier2,
+        tier3 + pos.tier3
+    )
 
     fun sum() = tier0 + tier1 + tier2 + tier3
 
@@ -36,9 +38,9 @@ data class Pos(val tier0: Int, val tier1: Int, val tier2: Int, val tier3: Int) {
         result = 31 * result + tier3
         return result
     }
-
-
 }
+
+val emptyPos = Pos(0, 0, 0, 0)
 
 class Inventory(var content: Pos) {
     fun isAppliable(action: Action): Boolean {
@@ -121,17 +123,22 @@ class Path(val path: List<Spell>) {
     }
 }
 
-class PathToInventory(val inventory: Inventory, val path: Path) {
+class PathToWitch(val witch: Witch, val path: Path) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other !is PathToInventory) return false
+        if (other !is PathToWitch) return false
 
-        if (inventory != other.inventory || path != other.path) return false
+        if (witch != other.witch) return false
+        if (path != other.path) return false
 
         return true
     }
 
-    override fun hashCode() = inventory.hashCode() + path.hashCode()
+    override fun hashCode(): Int {
+        var result = witch.hashCode()
+        result = 31 * result + path.hashCode()
+        return result
+    }
 }
 
 abstract class Action(val id: Int, val pos: Pos) {
@@ -158,11 +165,14 @@ class Spell(id: Int, pos: Pos, val repeatable: Boolean) : Action(id, pos) {
     }
 
     fun power(): Int {
-        return pos.power() + if (isOnlyPositive()) 5 else 0 + if (repeatable) 5 else 0
+        return pos.power() + if (isOnlyPositive()) 10 else 0 + if (repeatable) 1 else 0
     }
 
     override fun toString() = "S($id)"
 }
+
+val rest = Spell(-1, emptyPos, false)
+val brew = Spell(-2, emptyPos, false)
 
 class Potion(id: Int, pos: Pos, val price: Int) : Action(id, pos) {
     override fun toString() = "P($id, $price)"
@@ -170,14 +180,16 @@ class Potion(id: Int, pos: Pos, val price: Int) : Action(id, pos) {
 
 data class SpellToLearn(val spell: Spell, val cost: Int, val gain: Int)
 
-class SpellBook {
-    val spells: MutableList<Pair<Spell, Boolean>> = mutableListOf()
+class SpellBook(val spells: List<Pair<Spell, Boolean>>) {
+    //val spells: MutableList<Pair<Spell, Boolean>> = mutableListOf()
 
     fun contains(spell: Spell): Boolean = spells.map { it.first.id }.contains(spell.id)
 
-    fun add(spell: Spell, castable: Boolean) {
-        if (!contains(spell)) {
-            spells.add(Pair(spell, castable))
+    fun add(spell: Spell, castable: Boolean): SpellBook {
+        return if (contains(spell)) {
+            this
+        } else {
+            SpellBook(spells + Pair(spell, castable))
         }
     }
 
@@ -188,6 +200,34 @@ class SpellBook {
     fun isCastable(spell: Spell): Boolean {
         return castable().contains(spell)
     }
+
+    fun cast(spellToCast: Spell): SpellBook {
+        return SpellBook(spells.map { if (spellToCast == it.first) Pair(spellToCast, false) else it })
+    }
+
+    fun rest(): SpellBook {
+        val restedSpells = spells.map { elt -> Pair(elt.first, true) }
+        return SpellBook(restedSpells)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SpellBook) return false
+
+        if (spells != other.spells) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return spells.hashCode()
+    }
+
+    override fun toString(): String {
+        return "SpellBook(spells=$spells)"
+    }
+
+
 }
 
 class Tome {
@@ -205,25 +245,67 @@ class Tome {
 
     fun worthiestAffordableSpell(inventory: Inventory): Spell? {
         return spells
-                .filter { it.cost <= inventory.content.tier0 }
-                .maxBy { it.spell.power() }?.spell
+            .filter { it.cost <= inventory.content.tier0 }
+            .maxBy { it.spell.power() + it.gain }?.spell
     }
 }
 
 data class Witch(
-        var inventory: Inventory,
-        var pathToTarget: List<Pair<Spell, Int>>,
-        var target: Potion,
-        var score: Int,
-        var spellBook: SpellBook)
+    var inventory: Inventory,
+    var pathToTarget: Pair<Potion, List<Pair<Spell, Int>>>,
+    var score: Int,
+    var spellBook: SpellBook,
+    var brewCount: Int
+) {
 
-val emptyPos = Pos(0, 0, 0, 0)
+    fun cast(spell: Spell): Witch {
+        return Witch(
+            inventory.apply(spell),
+            pathToTarget,
+            score,
+            spellBook.cast(spell),
+            brewCount
+        )
+    }
+
+    fun rest(): Witch {
+        return Witch(
+            inventory,
+            pathToTarget,
+            score,
+            spellBook.rest(),
+            brewCount
+        )
+    }
+
+    fun castable(): List<Spell> {
+        return spellBook.castable().filter { inventory.isAppliable(it) }
+    }
+
+    fun hasTarget() = pathToTarget.first != emptyPotion
+
+    fun setTarget(newTarget: Pair<Potion, List<Pair<Spell, Int>>>) {
+        pathToTarget = newTarget
+    }
+
+    fun advancePath(): Pair<Spell, Int> {
+        return if (pathToTarget.second.isEmpty()) {
+            Pair(brew, 1)
+        } else {
+            val first = this.pathToTarget.second[0]
+            this.pathToTarget = Pair(this.pathToTarget.first, this.pathToTarget.second.drop(1))
+            first
+        }
+    }
+}
+
+
 val emptyInventory = Inventory(emptyPos)
 val emptyPath = listOf<Pair<Spell, Int>>()
 val emptyPotion = Potion(0, emptyPos, 0)
 
-val myWitch = Witch(emptyInventory, emptyPath, emptyPotion, 0, SpellBook())
-val opponentWitch = Witch(emptyInventory, emptyPath, emptyPotion, 0, SpellBook())
+val myWitch = Witch(emptyInventory, Pair(emptyPotion, emptyPath), 0, SpellBook(listOf()), 0)
+val opponentWitch = Witch(emptyInventory, Pair(emptyPotion, emptyPath), 0, SpellBook(listOf()), 0)
 
 fun main() {
     val input = Scanner(System.`in`)
@@ -234,8 +316,8 @@ fun main() {
     while (true) {
         currentTurn++
         val potions = mutableListOf<Potion>()
-        val mySpellBook = SpellBook()
-        val opponentSpellBook = SpellBook()
+        var mySpellBook = SpellBook(listOf())
+        var opponentSpellBook = SpellBook(listOf())
         val tome = Tome()
 
         var startTime: Long = 0
@@ -260,10 +342,10 @@ fun main() {
                     potions.add(Potion(actionId, delta, price))
                 }
                 "CAST" -> {
-                    mySpellBook.add(Spell(actionId, delta, repeatable), castable)
+                    mySpellBook = mySpellBook.add(Spell(actionId, delta, repeatable), castable)
                 }
                 "OPPONENT_CAST" -> {
-                    opponentSpellBook.add(Spell(actionId, delta, repeatable), castable)
+                    opponentSpellBook = opponentSpellBook.add(Spell(actionId, delta, repeatable), castable)
                 }
                 "LEARN" -> {
                     tome.add(Spell(actionId, delta, repeatable), tomeIndex, taxCount)
@@ -284,6 +366,9 @@ fun main() {
 
             val currentWitch = if (i == 0) myWitch else opponentWitch
             currentWitch.inventory = inventory
+            if (score > currentWitch.score) {
+                currentWitch.brewCount++
+            }
             currentWitch.score = score
             //System.err.println("inventory $inv0 $inv1 $inv2 $inv3 -> $score")
         }
@@ -305,7 +390,7 @@ private fun computeTime(startTime: Long): Long {
     return (endTime - startTime) / 1_000_000
 }
 
-private fun price(potions: MutableList<Potion>, potion: Potion): Int {
+private fun price(potions: List<Potion>, potion: Potion): Int {
     val bonus = when (potions.indexOf(potion)) {
         0 -> 3
         1 -> 1
@@ -315,22 +400,17 @@ private fun price(potions: MutableList<Potion>, potion: Potion): Int {
 }
 
 private fun computeAction(turn: Int, potions: MutableList<Potion>, tome: Tome, startTime: Long): String {
-    if (potions.contains(myWitch.target)) {
-        if (myWitch.pathToTarget.isNotEmpty()) {
-            val spell = myWitch.pathToTarget[0]
-            return castSpellOrRest(spell.first, spell.second)
-        } else {
-            System.err.println("ERROR: target ${myWitch.target}")
-        }
+    if (myWitch.hasTarget() && !potions.contains(myWitch.pathToTarget.first)) {
+        System.err.println("Resetting target ${myWitch.pathToTarget.first} with ${myWitch.pathToTarget.second}")
+        myWitch.setTarget(Pair(emptyPotion, emptyPath))
     }
 
-    myWitch.target = emptyPotion
-    myWitch.pathToTarget = emptyPath
+    val pathSelectionStrategy = getPathSelectionStrategy()
 
-    val brew = potions.filter { myWitch.inventory.isAppliable(it) }.maxBy { price(potions, it) }
-    if (brew != null && price(potions, brew) > 10) {
-        System.err.println("best doable brew $brew")
-        return "BREW ${brew.id}"
+    if (myWitch.hasTarget()) {
+        System.err.println("Targeting ${myWitch.pathToTarget.first} with ${myWitch.pathToTarget.second}")
+    } else {
+        System.err.println("No target")
     }
 
     val worthySpell = spellToLearn(myWitch.spellBook, myWitch.inventory, tome)
@@ -339,23 +419,41 @@ private fun computeAction(turn: Int, potions: MutableList<Potion>, tome: Tome, s
         return "LEARN ${worthySpell.id}"
     }
 
-    val retainedPaths = getRetainedPaths(myWitch.inventory, startTime, myWitch.spellBook, potions)
+    val retainedPaths = getRetainedPaths(myWitch, potions, startTime)
     if (retainedPaths.isNotEmpty()) {
         System.err.println("retained size ${retainedPaths.size}")
         retainedPaths.forEach { System.err.println("Potion: ${it.key}, length ${it.value.path}") }
-        val retainedEntry = retainedPaths.maxBy { entry -> price(potions, entry.key) }
-        //val retainedEntry = retainedPaths.minBy { entry -> entry.value.path.size }
-        // Optimize retained entry
-        val optimizedPath = optimizePath(retainedEntry!!.value.path)
-        val spellToCast = optimizedPath[0]
 
-        myWitch.target = retainedEntry.key
-        myWitch.pathToTarget = optimizedPath
-        return castSpellOrRest(spellToCast.first, spellToCast.second)
+        // Path Selection strategy
+        val bestPathToPotion = retainedPaths
+            .map { Pair(it.key, it.value.path.compact()) }
+            .filter { it.second.size < MAX_TURNS - turn }
+            .maxBy { pathSelectionStrategy(potions, it) }
+
+        if (myWitch.hasTarget()) {
+            if (pathSelectionStrategy(potions, bestPathToPotion!!) > pathSelectionStrategy(
+                    potions,
+                    myWitch.pathToTarget
+                )
+            ) {
+                System.err.println("Changing to target ${bestPathToPotion.first} with ${bestPathToPotion.second}")
+                myWitch.setTarget(bestPathToPotion)
+            }
+        } else {
+            System.err.println("Setting new target ${bestPathToPotion!!.first} with ${bestPathToPotion.second}")
+            myWitch.setTarget(bestPathToPotion)
+        }
+
+        return castSpellOrRest(myWitch)
+    } else {
+        if (myWitch.hasTarget()) {
+            System.err.println("Weird: no retained path even though we have a target ${myWitch.pathToTarget.first}")
+            return castSpellOrRest(myWitch)
+        }
     }
 
-    System.err.println("nothing was retained")
-    val spell = myWitch.spellBook.castable().sortedByDescending { it.power() }.elementAtOrNull(0)
+    System.err.println("nothing was retained, ${myWitch.spellBook}")
+    val spell = myWitch.castable().sortedByDescending { it.power() }.elementAtOrNull(0)
     return if (spell == null) {
         "REST"
     } else {
@@ -364,24 +462,39 @@ private fun computeAction(turn: Int, potions: MutableList<Potion>, tome: Tome, s
     }
 }
 
-fun optimizePath(path: Path): List<Pair<Spell, Int>> {
-    return path.compact()
+private fun getPathSelectionStrategy(): (List<Potion>, Pair<Potion, List<Pair<Spell, Int>>>) -> Int {
+    val maxPriceStrategy = { potions: List<Potion>, target: Pair<Potion, List<Pair<Spell, Int>>> ->
+        price(potions, target.first)
+    }
+    val shortestPathStrategy = { _: List<Potion>, target: Pair<Potion, List<Pair<Spell, Int>>> ->
+        -target.second.size
+    }
+    val balancedStrategy = { potions: List<Potion>, target: Pair<Potion, List<Pair<Spell, Int>>> ->
+        if (target.second.isEmpty()) price(potions, target.first) else price(potions, target.first) / target.second.size
+    }
+
+    val selectedStrategy: (List<Potion>, Pair<Potion, List<Pair<Spell, Int>>>) -> Int = balancedStrategy
+    return selectedStrategy
 }
 
-private fun castSpellOrRest(spellToCast: Spell, repetitions: Int): String {
-    return if (myWitch.spellBook.isCastable(spellToCast)) {
-        System.err.println("Going to potion ${myWitch.target}, and CAST ${spellToCast.id} $repetitions times")
-        myWitch.pathToTarget = myWitch.pathToTarget.drop(1)
-        "CAST ${spellToCast.id} $repetitions"
-    } else {
-        System.err.println("Going to potion ${myWitch.target}, and would cast ${spellToCast.id} $repetitions times, but must REST")
-        "REST"
+private fun castSpellOrRest(witch: Witch): String {
+    val pathElement = witch.advancePath()
+    return when (pathElement.first) {
+        rest -> {
+            "REST"
+        }
+        brew -> {
+            "BREW ${myWitch.pathToTarget.first.id}"
+        }
+        else -> {
+            "CAST ${pathElement.first.id} ${pathElement.second}"
+        }
     }
 }
 
 private fun spellToLearn(spellBook: SpellBook, inventory: Inventory, tome: Tome): Spell? {
     return when {
-        spellBook.spells.size < 10 -> {
+        spellBook.spells.size < 9 -> {
             tome.worthiestAffordableSpell(inventory)
         }
         else -> {
@@ -390,41 +503,52 @@ private fun spellToLearn(spellBook: SpellBook, inventory: Inventory, tome: Tome)
     }
 }
 
-private fun getRetainedPaths(startingInventory: Inventory, startTime: Long, mySpellBook: SpellBook, potions: MutableList<Potion>): MutableMap<Potion, PathToInventory> {
-    // Each node of the graph will be an inventory and the path to obtain it
-    var pathsToInventory = listOf(PathToInventory(startingInventory, Path(listOf())))
+private fun getRetainedPaths(
+    startingWitch: Witch,
+    potions: MutableList<Potion>,
+    startTime: Long
+): MutableMap<Potion, PathToWitch> {
+    // Each node of the graph will be a witch state and the path to obtain it
+    var alreadyGeneratedPaths = listOf(PathToWitch(startingWitch, Path(listOf())))
     // retainedPaths maps a potion to the first found path to inventory which allow it
-    val retainedPaths = mutableMapOf<Potion, PathToInventory>()
+    val retainedPaths = mutableMapOf<Potion, PathToWitch>()
     var depth = 0
     var computeTime: Long
     var stop = false
     while (!stop) {
         depth++
         //System.err.println("computed depth $depth, computation time $computeTime")
-        val newPathsToInventory = mutableListOf<PathToInventory>()
-        // generate new inventories from previous ones
-        for (currentPath in pathsToInventory) {
-            val appliableSpells = mySpellBook.spells.map { it.first }.filter { currentPath.inventory.isAppliable(it) }
-            val fromCurrent = appliableSpells.map { PathToInventory(currentPath.inventory.apply(it), currentPath.path.add(it)) }
-            newPathsToInventory.addAll(fromCurrent)
+        val newlyGeneratedPaths = mutableListOf<PathToWitch>()
+        // generate new paths from previous ones
+        for (currentPath in alreadyGeneratedPaths) {
+            val spellBook = currentPath.witch.spellBook
+            val inventory = currentPath.witch.inventory
+            val affordableSpells = spellBook.spells.map { it.first }.filter { inventory.isAppliable(it) }
+            val fromCurrent = affordableSpells.map {
+                if (spellBook.isCastable(it))
+                    PathToWitch(currentPath.witch.cast(it), currentPath.path.add(it))
+                else
+                    PathToWitch(currentPath.witch.rest(), currentPath.path.add(rest))
+            }
+            newlyGeneratedPaths.addAll(fromCurrent)
         }
         //System.err.println("depth $depth, current size: ${pathsToInventory.size}, new size: ${newPathsToInventory.size}, time: ${computeTime(startTime)}")
         // retain those that we don't already have and that allow to brew
-        for (pathToInventory in newPathsToInventory) {
+        for (retainedPathCandidate in newlyGeneratedPaths) {
             if (retainedPaths.size == potions.size) {
                 break
             }
             potions.filter { !retainedPaths.containsKey(it) }
-                    .filter { pathToInventory.inventory.isAppliable(it) }
-                    .forEach { retainedPaths[it] = pathToInventory }
+                .filter { retainedPathCandidate.witch.inventory.isAppliable(it) }
+                .forEach { retainedPaths[it] = retainedPathCandidate }
         }
 
-        pathsToInventory = newPathsToInventory
+        alreadyGeneratedPaths = newlyGeneratedPaths
 
         computeTime = computeTime(startTime)
-        stop = computeTime > 15 || retainedPaths.size == potions.size || newPathsToInventory.size > 5000
+        stop = computeTime > 15 || retainedPaths.size == potions.size || newlyGeneratedPaths.size > 900
     }
-    System.err.println("depth $depth, final size: ${pathsToInventory.size}, time: ${computeTime(startTime)}")
+    System.err.println("depth $depth, final size: ${alreadyGeneratedPaths.size}, time: ${computeTime(startTime)}")
     //System.err.println("end of generation")
     return retainedPaths
 }

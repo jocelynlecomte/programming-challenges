@@ -46,6 +46,7 @@ if possible, else REST
 - Else REST
 
 ### 4.0 (end of first-tier)
+
 - If we have a path and it's still valid (i.e there still is a valid target for it), continue to walk through it
 - Else if a potion can be made, BREW it (and prefer the one with max price) if its price is fair enough.
 - Else if we have less than 10 spells, LEARN the worthiest affordable spell
@@ -53,18 +54,51 @@ if possible, else REST
 - Else we don't have any path, so find the most powerful castable spell and CAST it
 - Else REST
 
-#### Retained paths generation
+### 5.0
 
-Generate inventories (checking time and memory) until we have one path for every potion
-    - Generate a graph of inventories reachable by casting spells on current inventory 
-    - Retain paths which allow to brew a new potion.
-    - It gives a path for each potion, which should be the shortest one
-        
+- If the current target isn't valid anymore, reset it
+- Choose a path selection strategy (between shortest path, balanced and max price)
+- If we have less than 9 spells, LEARN the worthiest affordable spell
+- Generate paths and if there are retained paths
+    - If we already have a target
+        - If the best target is better than our current target change it
+        - else keep current target
+    - else we have no current target, set the current target to the best target
+- Else (no retained paths), and we already have a target (this is weird), keep it
+- Else if a potion can be made, BREW it (it should be our target)
+- Else find the most powerful castable spell and CAST it
+- Else REST
+
+### Retained paths generation
+
+#### Until 4.0
+
+Generate inventories (checking time and memory) until we have one path for every potion - Generate a graph of
+inventories reachable by casting spells on current inventory - Retain paths which allow to brew a new potion. - It gives
+a path for each potion, which should be the shortest one
+
+#### From 5.0
+
+Same idea, but simulate the witch spellbook in order to know which spells are castable at any moment and generate REST
+orders when needed.
+
+### Finding the best path
+
+#### Until 4.0
+
+The path leading to the most expensive potion
+
+#### From 5.0
+
+There are several strategies:
+
+- max price
+- shortest path
+- balanced
+
 ### Ideas
+
 - WTF is Monte-Carlo ?
-- Try to generate more path by generating less objects
-- When we want to try a path and the first spell is exhausted, try to CAST another one in the path instead of REST
-- Optimize path:
-    - try to REST the least possible
+- Try to generate more path by generating less objects (using beam search ?)
     
  
