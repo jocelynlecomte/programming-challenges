@@ -85,18 +85,57 @@ class Game {
     var opponentIsWaiting = false
 
     fun getNextAction(): Action {
-        return possibleActions.maxByOrNull { action -> actionScore(action) }!!
+        val bestCompleteAction = possibleActions
+            .filter { action -> action.type == COMPLETE }
+            .maxByOrNull { action -> actionScore(action) }
+
+        if (bestCompleteAction != null) {
+            return bestCompleteAction
+        }
+
+        val bestGrowAction = possibleActions
+            .filter { action -> action.type == GROW }
+            .maxByOrNull { action -> treeByCell(action.targetCellIdx!!)!!.size }
+
+        if (bestGrowAction != null) {
+            return bestGrowAction
+        }
+
+        return Action("WAIT")
     }
 
-    fun actionScore(action: Action): Int {
+    private fun actionScore(action: Action): Int {
         return when (action.type) {
             COMPLETE -> nutrients + board[action.targetCellIdx!!].richness
             else -> 0
         }
     }
+
+    private fun actionCost(action: Action): Int {
+        return when (action.type) {
+            COMPLETE -> COMPLETE_COST
+            GROW -> {
+                val tree = treeByCell(action.targetCellIdx!!)
+                return when (tree!!.size) {
+                    1 -> 3 + treeCount(2)
+                    2 -> 7 + treeCount(3)
+                    else -> 0
+                }
+            }
+            else -> 0
+        }
+    }
+
+    private fun treeCount(size: Int): Int {
+        return trees.filter { tree -> tree.isMine }.count { tree -> tree.size == size }
+    }
+
+    private fun treeByCell(cellIndex: Int): Tree? {
+        return trees.find { tree -> tree.cellIndex == cellIndex }
+    }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     val input = Scanner(System.`in`)
     val game = Game()
     val numberOfCells: Int = input.nextInt()
@@ -144,11 +183,8 @@ fun main(args: Array<String>) {
         }
 
         System.err.println("possible actions: ${game.possibleActions}")
-
         System.err.println("nutrients ${game.nutrients}, mySun: ${game.mySun}")
         val action = game.getNextAction()
-
-
         println(action)
     }
 }
