@@ -243,7 +243,7 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
 
     private fun closestPossiblePelletPosition(pos: Pos): Pos {
         logln("in closest possible pellet pos for $pos, ${possiblePelletPositions.size}")
-        return possiblePelletPositions.minBy { distance(pos, it) } ?: Pos(0, 0)
+        return possiblePelletPositions.minByOrNull { distance(pos, it) } ?: Pos(0, 0)
     }
 
     fun computeLineOfSights() {
@@ -265,7 +265,7 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
     }
 
     private fun score(lineOfSight: List<Pos>): Int {
-        return lineOfSight.map { pos -> cellScore(pos) }.sum()
+        return lineOfSight.sumOf { pos -> cellScore(pos) }
     }
 
     private fun cellScore(pos: Pos): Int {
@@ -305,8 +305,8 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
 
 
         val closestSuperPelletPos = superPelletPositions
-                .filterNot { allTargets.contains(it) }
-                .minBy { distance(pac.pos, it) }
+            .filterNot { allTargets.contains(it) }
+            .minByOrNull { distance(pac.pos, it) }
 
         return if (closestSuperPelletPos != null) {
             closestSuperPelletPos
@@ -316,8 +316,8 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
                 farthestValuablePos
             } else {
                 val closestVisiblePelletPos = visibleSimplePelletPositions
-                        .filterNot { allTargets.contains(it) }
-                        .minBy { distance(pac.pos, it) }
+                    .filterNot { allTargets.contains(it) }
+                    .minByOrNull { distance(pac.pos, it) }
                 closestVisiblePelletPos ?: closestPossiblePelletPosition(pac.pos)
             }
         }
@@ -342,16 +342,17 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
 
     private fun findFarthestValuablePos(pos: Pos, linesOfSight: Map<Direction, List<Pos>>): Pos? {
         val bestDirection = linesOfSight
-                .map { entry -> Pair(entry.key, score(entry.value)) }
-                .maxBy { pair -> pair.second }!!.first
+            .map { entry -> Pair(entry.key, score(entry.value)) }
+            .maxByOrNull { pair -> pair.second }!!.first
 
         val bestLineOfSight = linesOfSight.getValue(bestDirection)
         logln("best line of sight: $bestDirection -> $bestLineOfSight")
-        return bestLineOfSight.dropLastWhile { cellScore(it) == 0 }.maxBy { distance(pos, it) }
+        return bestLineOfSight.dropLastWhile { cellScore(it) == 0 }.maxByOrNull { distance(pos, it) }
     }
 
     fun computeCommand(friendlyPac: Pac): String {
-        val enemyInSightPos = friendlyPac.linesOfSight.values.flatten().filter(isEnemy).minBy { distance(friendlyPac.pos, it) }
+        val enemyInSightPos =
+            friendlyPac.linesOfSight.values.flatten().filter(isEnemy).minByOrNull { distance(friendlyPac.pos, it) }
         val enemyInSight = visibleEnemyPacs().find { pac -> pac.pos == enemyInSightPos }
         val enemyWithinSafeDistance = visibleEnemyPacs().find { pac -> distance(friendlyPac.pos, pac.pos) < SAFETY_DISTANCE }
         val enemy = enemyInSight ?: enemyWithinSafeDistance
@@ -375,7 +376,7 @@ class Game(private val width: Int, private val height: Int, private val grid: Ar
             if (friendlyPac.hasCollided()) {
                 Strategy.COLLISION
             } else {
-                val moreSuperPellets = visiblePellets.any() { it.isSuper }
+                val moreSuperPellets = visiblePellets.any { it.isSuper }
                 if (moreSuperPellets && friendlyPac.canUseAbility()) {
                     Strategy.SPEED
                 } else {
