@@ -41,10 +41,7 @@ class NewYearChaosTest {
                     .collect(toList());
 
             var actual = NewYearChaos.minimumBribes(q);
-            var expected =
-
-
-                    expectationsReader.readLine();
+            var expected = expectationsReader.readLine();
 
             assertThat(actual).isEqualTo(expected) ;
         } catch (IOException ex) {
