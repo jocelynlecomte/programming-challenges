@@ -246,7 +246,7 @@ class Tome {
     fun worthiestAffordableSpell(inventory: Inventory): Spell? {
         return spells
             .filter { it.cost <= inventory.content.tier0 }
-            .maxBy { it.spell.power() + it.gain }?.spell
+            .maxByOrNull { it.spell.power() + it.gain }?.spell
     }
 }
 
@@ -428,7 +428,7 @@ private fun computeAction(turn: Int, potions: MutableList<Potion>, tome: Tome, s
         val bestPathToPotion = retainedPaths
             .map { Pair(it.key, it.value.path.compact()) }
             .filter { it.second.size < MAX_TURNS - turn }
-            .maxBy { pathSelectionStrategy(potions, it) }
+            .maxByOrNull { pathSelectionStrategy(potions, it) }
 
         if (myWitch.hasTarget()) {
             if (pathSelectionStrategy(potions, bestPathToPotion!!) > pathSelectionStrategy(

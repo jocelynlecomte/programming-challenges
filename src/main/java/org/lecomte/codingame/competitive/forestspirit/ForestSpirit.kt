@@ -85,7 +85,7 @@ class Game {
     var opponentIsWaiting = false
 
     fun getNextAction(): Action {
-        return possibleActions.maxBy { action -> actionScore(action) }!!
+        return possibleActions.maxByOrNull { action -> actionScore(action) }!!
     }
 
     fun actionScore(action: Action): Int {
