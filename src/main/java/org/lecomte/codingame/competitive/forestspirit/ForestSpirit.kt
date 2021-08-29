@@ -87,16 +87,16 @@ class Game {
     fun getNextAction(): Action {
         val seedActions = possibleActionByType(SEED)
         if (seedActions.isNotEmpty() && treeCountBySize(0) == 0) {
-            return seedActions.maxBy { board[it.targetCellIdx!!].richness }!!
+            return seedActions.maxByOrNull { board[it.targetCellIdx!!].richness }!!
         }
 
         val completeActions = possibleActionByType(COMPLETE)
         if (completeActions.size >= bigTreeLimit()) {
-            return completeActions.maxBy { actionScore(it) }!!
+            return completeActions.maxByOrNull { actionScore(it) }!!
         }
 
         val growActions = possibleActionByType(GROW)
-        val bestGrowAction = growActions.maxBy { treeByCell(it.targetCellIdx!!)!!.size }
+        val bestGrowAction = growActions.maxByOrNull { treeByCell(it.targetCellIdx!!)!!.size }
         if (bestGrowAction != null) {
             return bestGrowAction
         }
