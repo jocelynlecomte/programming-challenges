@@ -2,7 +2,6 @@ package org.lecomte.codingame.competitive.forestspirit
 
 import java.util.*
 
-
 data class Cell(val index: Int, val richness: Int, val neighbours: IntArray) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -47,6 +46,7 @@ const val SEED = "SEED"
 const val GROW = "GROW"
 const val COMPLETE = "COMPLETE"
 const val COMPLETE_COST = 4
+const val MAX_DAYS = 24
 
 fun parseAction(action: String): Action {
     val parts = action.split(" ")
@@ -85,18 +85,18 @@ class Game {
     var opponentIsWaiting = false
 
     fun getNextAction(): Action {
-        val bestCompleteAction = possibleActions
-            .filter { action -> action.type == COMPLETE }
-            .maxByOrNull { action -> actionScore(action) }
-
-        if (bestCompleteAction != null) {
-            return bestCompleteAction
+        val seedActions = possibleActionByType(SEED)
+        if (seedActions.isNotEmpty() && treeCountBySize(0) == 0) {
+            return seedActions.maxBy { board[it.targetCellIdx!!].richness }!!
         }
 
-        val bestGrowAction = possibleActions
-            .filter { action -> action.type == GROW }
-            .maxByOrNull { action -> treeByCell(action.targetCellIdx!!)!!.size }
+        val completeActions = possibleActionByType(COMPLETE)
+        if (completeActions.size >= bigTreeLimit()) {
+            return completeActions.maxBy { actionScore(it) }!!
+        }
 
+        val growActions = possibleActionByType(GROW)
+        val bestGrowAction = growActions.maxBy { treeByCell(it.targetCellIdx!!)!!.size }
         if (bestGrowAction != null) {
             return bestGrowAction
         }
@@ -117,22 +117,31 @@ class Game {
             GROW -> {
                 val tree = treeByCell(action.targetCellIdx!!)
                 return when (tree!!.size) {
-                    1 -> 3 + treeCount(2)
-                    2 -> 7 + treeCount(3)
+                    1 -> 3 + treeCountBySize(2)
+                    2 -> 7 + treeCountBySize(3)
                     else -> 0
                 }
             }
+            SEED -> treeCountBySize(0)
             else -> 0
         }
     }
 
-    private fun treeCount(size: Int): Int {
-        return trees.filter { tree -> tree.isMine }.count { tree -> tree.size == size }
+    private fun possibleActionByType(type: String): List<Action> {
+        return possibleActions.filter { it.type == type }
+    }
+
+    private fun treeCountBySize(size: Int): Int {
+        return trees.filter { it.isMine }.count { it.size == size }
     }
 
     private fun treeByCell(cellIndex: Int): Tree? {
-        return trees.find { tree -> tree.cellIndex == cellIndex }
+        return trees.find { it.cellIndex == cellIndex }
     }
+
+    private fun remainingDays() = MAX_DAYS - day
+
+    private fun bigTreeLimit() = remainingDays()
 }
 
 fun main() {
