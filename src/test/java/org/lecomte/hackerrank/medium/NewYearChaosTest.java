@@ -1,4 +1,4 @@
-package org.lecomte.hackerrank.medium.newyearchaos;
+package org.lecomte.hackerrank.medium;
 
 import org.junit.jupiter.api.Test;
 
