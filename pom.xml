@@ -5,14 +5,14 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.lecomte</groupId>
-    <artifactId>codingame</artifactId>
+    <artifactId>programming-challenges</artifactId>
     <version>1.0-SNAPSHOT</version>
 
-    <name>Solutions des puzzles Codingame</name>
+    <name>Solutions à différents challenges de programmation</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <kotlin.version>1.5.10</kotlin.version>
+        <kotlin.version>1.5.32</kotlin.version>
     </properties>
 
     <build>
@@ -44,6 +44,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>2.3.2</version>
                 <executions>
                     <execution>
                         <id>compile</id>
@@ -72,13 +73,13 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.6.0</version>
+            <version>5.8.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.15.0</version>
+            <version>3.21.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
