@@ -114,6 +114,23 @@ class Player {
         this.sign = Sign.valueOf(inputLine.playerSign);
     }
 
+    public Player getWinner(Player opponent) {
+        int compare = this.sign.compare(opponent.sign);
+        if (compare == 0) {
+            return (this.number < opponent.number) ? this : opponent;
+        } else {
+            return (compare < 0) ? opponent : this;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "Player{" +
+                "number=" + number +
+                ", sign=" + sign +
+                '}';
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -128,54 +145,90 @@ class Player {
     }
 }
 
-class Solver {
-    private List<Player> players;
+class Round {
+    List<Player> players;
+    List<Player> winners;
 
-    public Solver(List<InputLine> inputlines) {
-        players = inputlines.stream().map(Player::new).collect(toList());
+    public Round(List<Player> players) {
+        this.players = players;
+        this.winners = getWinners();
+    }
+
+    public boolean hasOnlyOneWinner() {
+        return winners.size() == 1;
+    }
+
+    private List<Player> getWinners() {
+        List<Player> winners = new ArrayList<>();
+        for (int i = 0; i < players.size(); i = i + 2) {
+            winners.add(players.get(i).getWinner(players.get(i + 1)));
+        }
+        return winners;
+    }
+
+    public Player getOpponent(Player player) {
+        Player opponent = null;
+        for (int i = 0; i < players.size() && opponent == null; i++) {
+            if (players.get(i).equals(player)) {
+                opponent = (i % 2 == 0) ? players.get(i + 1) : players.get(i - 1);
+            }
+        }
+        return opponent;
+    }
+}
+
+class Tournament {
+    List<Player> players;
+    List<Round> rounds;
+    Player winner;
+    List<Player> winnerOpponents;
+
+    public Tournament(List<Player> players) {
+        this.players = players;
+        this.rounds = getSuccessiveRounds();
+        this.winner = getWinner();
+        this.winnerOpponents = getWinnerOpponents();
+    }
+
+    private Player getWinner() {
+        return rounds.get(rounds.size() - 1).winners.get(0);
+    }
+
+    private List<Player> getWinnerOpponents() {
+        return rounds.stream()
+                .map(round -> round.getOpponent(winner))
+                .collect(toList());
+    }
+
+    private List<Round> getSuccessiveRounds() {
+        List<Round> rounds = new ArrayList<>();
+        Round currentRound = new Round(players);
+
+        while (!currentRound.hasOnlyOneWinner()) {
+            rounds.add(currentRound);
+            currentRound = new Round(currentRound.winners);
+        }
+        rounds.add(currentRound);
+
+        return rounds;
+    }
+}
+
+class Solver {
+    private final List<Player> players;
+
+    public Solver(List<InputLine> inputLines) {
+        players = inputLines.stream().map(Player::new).collect(toList());
     }
 
     public List<OutputLine<Integer>> solve() {
-        List<List<Player>> rounds = new ArrayList<>();
-        List<Player> currentRound = players;
+        Tournament tournament = new Tournament(players);
+        Player tournamentWinner = tournament.winner;
+        List<Integer> opponentsNumbers = tournament.winnerOpponents.stream().map(player -> player.number).collect(toList());
 
-        while (currentRound.size() > 1) {
-            rounds.add(currentRound);
-            List<Player> nextTurn = new ArrayList<>();
-            for (int i = 0; i < currentRound.size(); i = i + 2) {
-                nextTurn.add(winner(currentRound.get(i), currentRound.get(i + 1)));
-            }
-            currentRound = nextTurn;
-        }
-
-        Player winner = currentRound.get(0);
-        List<Integer> opponents = getOpponents(rounds, winner).stream().map(player -> player.number).collect(toList());
-
-        OutputLine<Integer> outputLine1 = new OutputLine<>(winner.number);
-        OutputLine<Integer> outputLine2 = new OutputLine<>(opponents);
+        OutputLine<Integer> outputLine1 = new OutputLine<>(tournamentWinner.number);
+        OutputLine<Integer> outputLine2 = new OutputLine<>(opponentsNumbers);
         return List.of(outputLine1, outputLine2);
-    }
-
-    private Player winner(Player p1, Player p2) {
-        int compare = p1.sign.compare(p2.sign);
-        if (compare == 0) {
-            return (p1.number < p2.number) ? p1 : p2;
-        } else {
-            return (compare < 0) ? p2 : p1;
-        }
-    }
-
-    private List<Player> getOpponents(List<List<Player>> turns, Player winner) {
-        return turns.stream()
-                .map(players -> {
-                    Player opponent = null;
-                    for (int i = 0; i < players.size() && opponent == null; i++) {
-                        if (players.get(i).equals(winner)) {
-                            opponent = (i % 2 == 0) ? players.get(i + 1) : players.get(i - 1);
-                        }
-                    }
-                    return opponent;
-                }).collect(toList());
     }
 }
 
